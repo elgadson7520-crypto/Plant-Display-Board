@@ -287,8 +287,12 @@ function computeKPI(ws, row){
 // EXTRACT DAILY DATA for chart bars
 //   Reads individual day rows and computes per-day KPIs
 // ══════════════════════════════════════════════════════════════
-function extractDaily(ws, startRow, label){
+function extractDaily(ws, startRow, label, cfg){
   const dates=[], setupMin=[], feedRunHr=[], feedsSchHr=[], downtime=[], oeeData=[];
+  // 120 Serenco & 130 McKinley use D/(L+M+N) for Feed Run Hr
+  // All others use D/M
+  const altFRH = (cfg.sheet==='120 Serenco' || cfg.sheet==='130 McKinley');
+
   for(let r = startRow; r < startRow + DAILY.maxRows; r++){
     const dv = cv(ws, r, C.A);
     if(dv == null) continue;
@@ -307,10 +311,24 @@ function extractDaily(ws, startRow, label){
     if(D === 0 && M === 0 && P === 0) continue;
 
     dates.push(ds);
-    setupMin.push(  (F > 0 && L > 0) ? Math.round((L*60)/F * 10)/10 : 0 );
-    feedRunHr.push(  (M > 0) ? Math.round(D / M) : 0 );
-    feedsSchHr.push( (P > 0) ? Math.round(D / P) : 0 );
-    downtime.push(   (P > 0) ? Math.round((N+O)/P * 1000)/10 : 0 );
+
+    // Min/Setup = (L * 60) / F
+    setupMin.push( (F > 0 && L > 0) ? Math.round((L*60)/F * 10)/10 : 0 );
+
+    // Feed Run Hr: D/M (most sheets) or D/(L+M+N) (120 Serenco, 130 McKinley)
+    if(altFRH){
+      const denom = L + M + N;
+      feedRunHr.push( denom > 0 ? Math.round(D / denom) : 0 );
+    } else {
+      feedRunHr.push( M > 0 ? Math.round(D / M) : 0 );
+    }
+
+    // Feeds/Sch Hr = D / (M + O)  ← daily formula per spreadsheet
+    const moPlusO = M + O;
+    feedsSchHr.push( moPlusO > 0 ? Math.round(D / moPlusO) : 0 );
+
+    // Downtime % = (N + O) / P * 100
+    downtime.push( P > 0 ? Math.round((N+O)/P * 1000)/10 : 0 );
 
     // OEE components from columns R (Utilization) and U (Efficiency)
     const util  = num(cv(ws, r, C.R));
@@ -344,9 +362,9 @@ function parseMachine(ws, cfg){
 
   // 2) Extract daily chart data
   const shifts = [];
-  const s1 = extractDaily(ws, DAILY.shift1Start, '1st');
+  const s1 = extractDaily(ws, DAILY.shift1Start, '1st', cfg);
   if(s1){ s1.kpi = s1kpi; shifts.push(s1); }
-  const s2 = extractDaily(ws, DAILY.shift2Start, '2nd');
+  const s2 = extractDaily(ws, DAILY.shift2Start, '2nd', cfg);
   if(s2){ s2.kpi = s2kpi; shifts.push(s2); }
 
   if(!shifts.length) return null;
