@@ -205,33 +205,22 @@ const SB_PER_PAGE = 2;
 
 const TARGETS = { setupMin:23.49, feedRunHr:2750, feedsSchHr:1783, downtime:16 };
 
-const SHEETS = [
-  {sheet:'120 Serenco',  name:'120 Serenco FFG',  short:'120'},
-  {sheet:'130 McKinley', name:'130 McKinley FFG',  short:'130M'},
-  {sheet:'220 McKinley', name:'220 McKinley RDC',  short:'220'},
-  {sheet:'230 Ward',     name:'230 Ward RDC',      short:'230'},
-  {sheet:'210 Apstar',   name:'210 Apstar RDC',    short:'210'},
-  {sheet:'410 Post',     name:'410 Post SFG',      short:'410'},
-  {sheet:'420 Post',     name:'420 Post SFG',      short:'420'},
-  {sheet:'425',          name:'425 Post SFG',      short:'425'},
-];
-
-// ══════════════════════════════════════════════════════════════
-// COLUMN INDICES (0-based for XLSX.js)
-//   Excel Col A=1 -> idx 0,  D=4 -> idx 3,  F=6 -> idx 5
-//   H=8->7, L=12->11, M=13->12, N=14->13, O=15->14, P=16->15
-//   R=18->17, U=21->20
-// ══════════════════════════════════════════════════════════════
-const C = { A:0, D:3, F:5, H:7, L:11, M:12, N:13, O:14, P:15, R:17, U:20 };
-
-// SUMMARY ROW INDICES (0-based for XLSX.js)
-//   Excel Row 34 -> idx 33  (1st Shift totals)
-//   Excel Row 66 -> idx 65  (2nd Shift totals)
-//   Excel Row 72 -> idx 71  (Combined totals)
-const SUMMARY = { shift1: 33, shift2: 65, combined: 71 };
-
-// DAILY DATA ROW RANGES (0-based, Excel rows 11-29 -> idx 10-28, 43-61 -> idx 42-60)
-const DAILY = { shift1Start: 10, shift2Start: 42, maxRows: 22 };
+// Machine sheets are detected dynamically — any sheet with "Production Efficiency - Summary"
+// in cell A4 is treated as a machine sheet. No hardcoded sheet names needed.
+function detectMachineSheets(wb){
+  const sheets = [];
+  wb.SheetNames.forEach(name => {
+    const ws = wb.Sheets[name];
+    // Check A4 for "Production Efficiency - Summary"
+    const a4 = cell(ws, 'A4');
+    if(a4 && typeof a4 === 'string' && a4.includes('Production Efficiency')){
+      const shortMatch = name.match(/^(\d+)/);
+      const short = shortMatch ? shortMatch[1] : name.substring(0,4);
+      sheets.push({ sheet: name, name: name, short: short });
+    }
+  });
+  return sheets;
+}
 
 // ══════════════════════════════════════════════════════════════
 // CLOCK
@@ -245,95 +234,109 @@ function updateClock(){
 setInterval(updateClock,10000); updateClock();
 
 // ══════════════════════════════════════════════════════════════
-// CELL READER — reads a single cell value from the XLSX.js worksheet
-//   ws: XLSX.js worksheet object
-//   r:  0-based row index
-//   c:  0-based column index
+// CELL READER — reads by Excel-style address e.g. "D34"
 // ══════════════════════════════════════════════════════════════
-function cv(ws, r, c){
-  const addr = XLSX.utils.encode_cell({r:r, c:c});
-  const cell = ws[addr];
-  return cell ? cell.v : null;
+function cell(ws, ref){
+  const c = ws[ref];
+  return (c && c.v != null) ? c.v : null;
+}
+// Read a numeric cell, returns 0 for null/blank/NaN/string
+function cellNum(ws, ref){
+  const v = cell(ws, ref);
+  return (typeof v === 'number' && isFinite(v)) ? v : 0;
 }
 
-// Safe number: returns 0 for null/undefined/NaN
-function num(v){ return (v != null && isFinite(v)) ? v : 0; }
+// ══════════════════════════════════════════════════════════════
+// FORMATTERS
+// ══════════════════════════════════════════════════════════════
+function fmtInt(v){ return Math.round(v); }
+function fmtPct(v){ return Math.round(v * 1000) / 10; } // 0.102 → 10.2
 
 // ══════════════════════════════════════════════════════════════
-// KPI COMPUTATION from a summary row
-//   Formulas:
+// kpisForTable — the SINGLE source of truth for KPI computation
+//   level: "shift1" → row 34,  "shift2" → row 66,  "combined" → row 72
+//   Returns: { su, frh, fsh, dt } where dt is already a percentage (10.2 not 0.102)
+//
+//   Formulas (from the spreadsheet):
 //     Mins/Setup   = (L * 60) / F
 //     Feeds/Run Hr = D / M
 //     Feeds/Sch Hr = D / P
-//     Downtime %   = (N + O) / P   (returned as percentage, e.g. 11.9)
+//     Downtime %   = (N + O) / P
 // ══════════════════════════════════════════════════════════════
-function computeKPI(ws, row){
-  const D = num(cv(ws, row, C.D));
-  const F = num(cv(ws, row, C.F));
-  const L = num(cv(ws, row, C.L));
-  const M = num(cv(ws, row, C.M));
-  const N = num(cv(ws, row, C.N));
-  const O = num(cv(ws, row, C.O));
-  const P = num(cv(ws, row, C.P));
+function kpisForTable(ws, level){
+  const row = level === 'shift1' ? 34 : level === 'shift2' ? 66 : 72;
+  const D = cellNum(ws, 'D'+row);
+  const F = cellNum(ws, 'F'+row);
+  const L = cellNum(ws, 'L'+row);
+  const M = cellNum(ws, 'M'+row);
+  const N = cellNum(ws, 'N'+row);
+  const O = cellNum(ws, 'O'+row);
+  const P = cellNum(ws, 'P'+row);
   return {
-    su:  (F > 0) ? Math.round((L * 60) / F * 10) / 10 : 0,
-    frh: (M > 0) ? Math.round(D / M)                   : 0,
-    fsh: (P > 0) ? Math.round(D / P)                   : 0,
-    dt:  (P > 0) ? Math.round((N + O) / P * 1000) / 10 : 0,
+    su:  (F > 0) ? fmtInt((L * 60) / F)  : 0,
+    frh: (M > 0) ? fmtInt(D / M)          : 0,
+    fsh: (P > 0) ? fmtInt(D / P)          : 0,
+    dt:  (P > 0) ? fmtPct((N + O) / P)    : 0,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════
+// kpisForDay — same formulas applied to a single daily row
+//   rowNum is the Excel row number (11, 12, 13, ... 28 for shift 1)
+// ══════════════════════════════════════════════════════════════
+function kpisForDay(ws, rowNum){
+  const D = cellNum(ws, 'D'+rowNum);
+  const F = cellNum(ws, 'F'+rowNum);
+  const L = cellNum(ws, 'L'+rowNum);
+  const M = cellNum(ws, 'M'+rowNum);
+  const N = cellNum(ws, 'N'+rowNum);
+  const O = cellNum(ws, 'O'+rowNum);
+  const P = cellNum(ws, 'P'+rowNum);
+  return {
+    su:  (F > 0 && L > 0) ? fmtInt((L * 60) / F) : 0,
+    frh: (M > 0) ? fmtInt(D / M)                   : 0,
+    fsh: (P > 0) ? fmtInt(D / P)                   : 0,
+    dt:  (P > 0) ? fmtPct((N + O) / P)             : 0,
+    hasData: (D > 0 || M > 0 || P > 0),
   };
 }
 
 // ══════════════════════════════════════════════════════════════
 // EXTRACT DAILY DATA for chart bars
-//   Reads individual day rows and computes per-day KPIs
+//   Shift 1: Excel rows 11-29,  Shift 2: Excel rows 43-61
 // ══════════════════════════════════════════════════════════════
-function extractDaily(ws, startRow, label, cfg){
+function extractDaily(ws, excelStartRow, label){
   const dates=[], setupMin=[], feedRunHr=[], feedsSchHr=[], downtime=[], oeeData=[];
-  // 120 Serenco & 130 McKinley use D/(L+M+N) for Feed Run Hr
-  // All others use D/M
-  const altFRH = (cfg.sheet==='120 Serenco' || cfg.sheet==='130 McKinley');
 
-  for(let r = startRow; r < startRow + DAILY.maxRows; r++){
-    const dv = cv(ws, r, C.A);
+  for(let row = excelStartRow; row < excelStartRow + 22; row++){
+    // Read date from column A
+    const dv = cell(ws, 'A'+row);
     if(dv == null) continue;
-    if(typeof dv !== 'number') continue; // skip non-date rows
-    const d = XLSX.SSF.parse_date_code(dv);
-    const ds = `${d.m}/${d.d}`;
+    let ds;
+    if(typeof dv === 'number'){
+      const d = XLSX.SSF.parse_date_code(dv);
+      ds = `${d.m}/${d.d}`;
+    } else if(typeof dv === 'string'){
+      const trimmed = dv.trim();
+      const parts = trimmed.match(/(\d{1,2})\/(\d{1,2})/);
+      if(!parts) continue;
+      ds = `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+    } else continue;
 
-    const D = num(cv(ws, r, C.D));
-    const F = num(cv(ws, r, C.F));
-    const L = num(cv(ws, r, C.L));
-    const M = num(cv(ws, r, C.M));
-    const N = num(cv(ws, r, C.N));
-    const O = num(cv(ws, r, C.O));
-    const P = num(cv(ws, r, C.P));
-
-    if(D === 0 && M === 0 && P === 0) continue;
+    const kpi = kpisForDay(ws, row);
+    if(!kpi.hasData) continue;
 
     dates.push(ds);
-
-    // Min/Setup = (L * 60) / F
-    setupMin.push( (F > 0 && L > 0) ? Math.round((L*60)/F * 10)/10 : 0 );
-
-    // Feed Run Hr: D/M (most sheets) or D/(L+M+N) (120 Serenco, 130 McKinley)
-    if(altFRH){
-      const denom = L + M + N;
-      feedRunHr.push( denom > 0 ? Math.round(D / denom) : 0 );
-    } else {
-      feedRunHr.push( M > 0 ? Math.round(D / M) : 0 );
-    }
-
-    // Feeds/Sch Hr = D / (M + O)  ← daily formula per spreadsheet
-    const moPlusO = M + O;
-    feedsSchHr.push( moPlusO > 0 ? Math.round(D / moPlusO) : 0 );
-
-    // Downtime % = (N + O) / P * 100
-    downtime.push( P > 0 ? Math.round((N+O)/P * 1000)/10 : 0 );
+    setupMin.push(kpi.su);
+    feedRunHr.push(kpi.frh);
+    feedsSchHr.push(kpi.fsh);
+    downtime.push(kpi.dt);
 
     // OEE components from columns R (Utilization) and U (Efficiency)
-    const util  = num(cv(ws, r, C.R));
-    const eff   = num(cv(ws, r, C.U));
-    const waste = num(cv(ws, r, C.H));
+    const util  = cellNum(ws, 'R'+row);
+    const eff   = cellNum(ws, 'U'+row);
+    const waste = cellNum(ws, 'H'+row);
+    const D     = cellNum(ws, 'D'+row);
     oeeData.push({ avail:util, perf:eff, quality:(D>0 ? Math.max(0, 1 - waste/D) : 1) });
   }
   if(!dates.length) return null;
@@ -355,16 +358,16 @@ function extractDaily(ws, startRow, label, cfg){
 // PARSE ONE MACHINE WORKSHEET
 // ══════════════════════════════════════════════════════════════
 function parseMachine(ws, cfg){
-  // 1) Read KPIs from summary rows (the source of truth)
-  const combined = computeKPI(ws, SUMMARY.combined);  // Row 72
-  const s1kpi    = computeKPI(ws, SUMMARY.shift1);     // Row 34
-  const s2kpi    = computeKPI(ws, SUMMARY.shift2);     // Row 66
+  // 1) KPIs from summary rows — the source of truth
+  const combined = kpisForTable(ws, 'combined');  // Row 72
+  const s1kpi    = kpisForTable(ws, 'shift1');     // Row 34
+  const s2kpi    = kpisForTable(ws, 'shift2');     // Row 66
 
-  // 2) Extract daily chart data
+  // 2) Daily chart data (Excel rows 11-29 for shift 1, 43-61 for shift 2)
   const shifts = [];
-  const s1 = extractDaily(ws, DAILY.shift1Start, '1st', cfg);
+  const s1 = extractDaily(ws, 11, '1st');
   if(s1){ s1.kpi = s1kpi; shifts.push(s1); }
-  const s2 = extractDaily(ws, DAILY.shift2Start, '2nd', cfg);
+  const s2 = extractDaily(ws, 43, '2nd');
   if(s2){ s2.kpi = s2kpi; shifts.push(s2); }
 
   if(!shifts.length) return null;
@@ -386,8 +389,10 @@ function parseMachine(ws, cfg){
       alerts.push(`${sh.shift} Shift: Setup above target 3+ days`);
   });
 
-  // DEBUG: log combined values to console for verification
-  console.log(`${cfg.name}: Setup=${combined.su}, FeedRunHr=${combined.frh}, FeedSchHr=${combined.fsh}, DT=${combined.dt}%`);
+  // DEBUG: log all KPIs to console for verification
+  console.log(`${cfg.name} Combined: Setup=${combined.su}, FRH=${combined.frh}, FSH=${combined.fsh}, DT=${combined.dt}%`);
+  console.log(`${cfg.name} Shift1:   Setup=${s1kpi.su}, FRH=${s1kpi.frh}, FSH=${s1kpi.fsh}, DT=${s1kpi.dt}%`);
+  console.log(`${cfg.name} Shift2:   Setup=${s2kpi.su}, FRH=${s2kpi.frh}, FSH=${s2kpi.fsh}, DT=${s2kpi.dt}%`);
 
   return {
     name: cfg.name, short: cfg.short, shifts,
@@ -401,11 +406,10 @@ function parseMachine(ws, cfg){
 // ══════════════════════════════════════════════════════════════
 function processWorkbook(wb){
   allMachines = [];
-  SHEETS.forEach(cfg => {
-    if(wb.SheetNames.includes(cfg.sheet)){
-      const m = parseMachine(wb.Sheets[cfg.sheet], cfg);
-      if(m) allMachines.push(m);
-    }
+  const machineSheets = detectMachineSheets(wb);
+  machineSheets.forEach(cfg => {
+    const m = parseMachine(wb.Sheets[cfg.sheet], cfg);
+    if(m) allMachines.push(m);
   });
   if(!allMachines.length){ alert('No machine data found.'); return; }
   rotateMs = parseInt(document.getElementById('cfgInterval').value || 15) * 1000;
@@ -483,6 +487,9 @@ function renderScoreboard(start, end, pg, total){
     const gi = start + li;
     const kpi = m.combined;  // from Row 72
 
+    // RENDER-TIME DIAGNOSTIC: what are we actually displaying?
+    console.log(`RENDER ${m.name}: su=${kpi.su}, frh=${kpi.frh}, fsh=${kpi.fsh}, dt=${kpi.dt}`);
+
     // Score: how many metrics hit target
     let score = 0;
     if(kpi.su > 0 && kpi.su <= TARGETS.setupMin) score++;
@@ -496,16 +503,16 @@ function renderScoreboard(start, end, pg, total){
     const oc = m.oee>=80 ? 'var(--green)' : m.oee>=60 ? 'var(--yellow)' : 'var(--red)';
 
     const metrics = [
-      { label:'SETUP',      val: kpi.su > 0 ? kpi.su.toFixed(1) : '—',
+      { label:'SETUP',      val: kpi.su > 0 ? fmtInt(kpi.su) : '—',
         hit: kpi.su > 0 && kpi.su <= TARGETS.setupMin,
         tag: kpi.su <= 0 ? '' : kpi.su <= TARGETS.setupMin ? '✓ ON TARGET' : '▲ ABOVE' },
-      { label:'DOWNTIME',   val: kpi.dt > 0 ? kpi.dt.toFixed(1)+'%' : '—',
+      { label:'DOWNTIME',   val: kpi.dt > 0 ? kpi.dt+'%' : '—',
         hit: kpi.dt > 0 && kpi.dt <= TARGETS.downtime,
         tag: kpi.dt <= 0 ? '' : kpi.dt <= TARGETS.downtime ? '✓ ON TARGET' : '▲ ABOVE' },
-      { label:'FEED/RUN HR', val: kpi.frh > 0 ? kpi.frh.toLocaleString() : '—',
+      { label:'FEED/RUN HR', val: kpi.frh > 0 ? fmtInt(kpi.frh).toLocaleString() : '—',
         hit: kpi.frh > 0 && kpi.frh >= TARGETS.feedRunHr,
         tag: kpi.frh <= 0 ? '' : kpi.frh >= TARGETS.feedRunHr ? '✓ ON TARGET' : '▼ BELOW' },
-      { label:'FEED/SCH HR', val: kpi.fsh > 0 ? kpi.fsh.toLocaleString() : '—',
+      { label:'FEED/SCH HR', val: kpi.fsh > 0 ? fmtInt(kpi.fsh).toLocaleString() : '—',
         hit: kpi.fsh > 0 && kpi.fsh >= TARGETS.feedsSchHr,
         tag: kpi.fsh <= 0 ? '' : kpi.fsh >= TARGETS.feedsSchHr ? '✓ ON TARGET' : '▼ BELOW' },
     ];
@@ -557,10 +564,10 @@ function renderMachineDetail(machine){
   body.innerHTML = '';
 
   const metricDefs = [
-    { key:'setupMin',    title:'Min/Set Up',     target:23.49, unit:'',  arrow:'down', fmt: v => v.toFixed(1) },
-    { key:'downtime',    title:'Downtime %',      target:16,    unit:'%', arrow:'down', fmt: v => v.toFixed(1)+'%' },
-    { key:'feedRunHr',   title:'Feeds/Run Hr.',   target:2750,  unit:'',  arrow:'up',   fmt: v => v>=1000 ? Math.round(v).toLocaleString() : Math.round(v) },
-    { key:'feedsSchHr',  title:'Feeds/Sch. Hr.',  target:1783,  unit:'',  arrow:'up',   fmt: v => v>=1000 ? Math.round(v).toLocaleString() : Math.round(v) },
+    { key:'setupMin',    kpiKey:'su',  title:'Min/Set Up',     target:23.49, unit:'',  arrow:'down', fmt: v => v.toFixed ? v.toFixed(0) : v },
+    { key:'downtime',    kpiKey:'dt',  title:'Downtime %',      target:16,    unit:'%', arrow:'down', fmt: v => v.toFixed ? v.toFixed(1)+'%' : v },
+    { key:'feedRunHr',   kpiKey:'frh', title:'Feeds/Run Hr.',   target:2750,  unit:'',  arrow:'up',   fmt: v => v>=1000 ? Math.round(v).toLocaleString() : Math.round(v) },
+    { key:'feedsSchHr',  kpiKey:'fsh', title:'Feeds/Sch. Hr.',  target:1783,  unit:'',  arrow:'up',   fmt: v => v>=1000 ? Math.round(v).toLocaleString() : Math.round(v) },
   ];
 
   const shiftsToShow = machine.shifts.length >= 2
@@ -589,9 +596,10 @@ function renderMachineDetail(machine){
       panel.className = 'chart-panel';
 
       const vals = shift[metric.key];
-      const nz = vals.filter(v => v > 0);
-      const avg = nz.length ? nz.reduce((a,b)=>a+b,0)/nz.length : 0;
-      const hit = metric.arrow === 'down' ? avg <= metric.target : avg >= metric.target;
+      // Use the KPI from kpisForTable (Row 34/66) — NOT averaged daily values
+      const kpiVal = shift.kpi ? shift.kpi[metric.kpiKey] : 0;
+      console.log(`DETAIL ${machine.name} ${shift.shift}: ${metric.kpiKey}=${kpiVal}`);
+      const hit = metric.arrow === 'down' ? kpiVal <= metric.target : kpiVal >= metric.target;
       panel.classList.add(hit ? 'panel-hit' : 'panel-miss');
 
       const ac = metric.arrow==='down' ? (hit?'▼':'▲') : (hit?'▲':'▼');
@@ -608,7 +616,7 @@ function renderMachineDetail(machine){
         <span class="chart-badge ${si?'s2':'s1'}">${machine.short}</span>
         <span class="chart-ttl">${metric.title}</span>
         <div class="chart-kpi">
-          <span class="chart-kpi-val" style="color:${hit?'var(--green)':'var(--red)'}">${metric.fmt(avg)}</span>
+          <span class="chart-kpi-val" style="color:${hit?'var(--green)':'var(--red)'}">${metric.fmt(kpiVal)}</span>
           <span class="chart-kpi-arrow ${hit?'good':'bad'}">${ac}</span>
         </div>
       </div><div class="chart-wrap"><canvas></canvas></div>`;
@@ -763,11 +771,10 @@ async function checkForUpdates(){
       r.onload = evt => {
         const wb = XLSX.read(new Uint8Array(evt.target.result), {type:'array'});
         allMachines = [];
-        SHEETS.forEach(cfg => {
-          if(wb.SheetNames.includes(cfg.sheet)){
-            const m = parseMachine(wb.Sheets[cfg.sheet], cfg);
-            if(m) allMachines.push(m);
-          }
+        const machineSheets = detectMachineSheets(wb);
+        machineSheets.forEach(cfg => {
+          const m = parseMachine(wb.Sheets[cfg.sheet], cfg);
+          if(m) allMachines.push(m);
         });
         if(allMachines.length){ buildPages(); showPage(Math.min(saved, pages.length-1)); if(!isPaused) startRotation(); }
       };
