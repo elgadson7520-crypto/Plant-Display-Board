@@ -8,7 +8,7 @@
 <meta name="screen-orientation" content="landscape">
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>SupplyOne Albuquerque — Weekly PEFS Command Center</title>
+<title>SupplyOne OKC — Weekly PEFS Command Center</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap');
@@ -16,8 +16,8 @@
 :root{
   --bg:#ffffff;--bg2:#f5f6f8;--bg3:#ebeef2;--bg4:#dde1e7;
   --panel:#ffffff;--panel-border:#c8cdd4;
-  --navy:#0d5c63;--navy2:#0d9488;--navy-light:#14b8a6;
-  --silver:#6b8f7a;--silver-lt:#8faa9b;--silver-dk:#4a6b5a;
+  --navy:#8b0000;--navy2:#c8102e;--navy-light:#e63946;
+  --silver:#4a4e69;--silver-lt:#6c7a89;--silver-dk:#3d3d3d;
   --green:#0f8a4f;--green-soft:#e8f5ef;
   --yellow:#c57d06;--yellow-soft:#fef5e0;
   --red:#c8102e;--red-soft:#fceaed;
@@ -98,7 +98,7 @@ body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;-web
 
 /* ── DEPARTMENT BANNER (on machine screens) ── */
 .dept-banner{display:flex;align-items:center;justify-content:center;gap:2vw;padding:.6vh 0;flex-shrink:0;border-bottom:2px solid var(--bg4)}
-.dept-banner.primary{background:linear-gradient(90deg,var(--bg),rgba(13,92,99,0.06),var(--bg))}
+.dept-banner.primary{background:linear-gradient(90deg,var(--bg),rgba(139,0,0,0.06),var(--bg))}
 .dept-banner.finishing{background:linear-gradient(90deg,var(--bg),rgba(134,147,151,0.08),var(--bg))}
 .dept-banner-icon{width:3.5vw;height:3.5vw;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;font-size:1.6vw;font-weight:700;color:#fff;flex-shrink:0}
 .dept-banner-icon.primary{background:var(--navy)}
@@ -114,7 +114,7 @@ body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;-web
 .mc-big{flex:1;background:var(--panel);border-radius:16px;border:3px solid var(--panel-border);
   display:flex;flex-direction:row;align-items:stretch;
   padding:1.5vh 1.5vw;position:relative;overflow:hidden;
-  box-shadow:0 4px 20px rgba(13,92,99,0.06);gap:1.5vw}
+  box-shadow:0 4px 20px rgba(139,0,0,0.06);gap:1.5vw}
 .mc-big::before{content:'';position:absolute;top:0;left:0;width:100%;height:6px;border-radius:16px 16px 0 0}
 .mc-big.good::before{background:var(--green)}
 .mc-big.warn::before{background:var(--yellow)}
@@ -224,7 +224,7 @@ body{background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;-web
 /* ── PROGRESS DOTS ── */
 .progress-dots{display:flex;align-items:center;gap:8px}
 .pdot{width:10px;height:10px;border-radius:50%;background:var(--bg4);transition:all .4s}
-.pdot.active{background:var(--navy);transform:scale(1.5);box-shadow:0 0 0 3px rgba(13,92,99,0.2)}
+.pdot.active{background:var(--navy);transform:scale(1.5);box-shadow:0 0 0 3px rgba(139,0,0,0.2)}
 .pdot.motive{background:var(--silver)}
 .pdot.motive.active{background:var(--navy)}
 /* Progress bar inside footer */
@@ -264,12 +264,12 @@ body.cursor-hidden{cursor:none}
 <!-- TV tap-to-start overlay (Samsung Tizen needs a user gesture for fullscreen) -->
 <div class="tap-overlay" id="tapOverlay">
   <div class="tap-ring"><div class="tap-ring-inner">&#9654;</div></div>
-  <h2>SUPPLYONE ALBUQUERQUE</h2>
+  <h2>SUPPLYONE OKC</h2>
   <p>TAP ANYWHERE TO START DISPLAY</p>
 </div>
 
 <div id="uploadScreen">
-  <div class="logo-area"><h1>SUPPLY<b>ONE</b></h1><p>Albuquerque &mdash; Weekly PEFS Command Center</p></div>
+  <div class="logo-area"><h1>SUPPLY<b>ONE</b></h1><p>OKC &mdash; Weekly PEFS Command Center</p></div>
   <div class="mode-tabs">
     <button class="mode-tab active" onclick="switchMode('sheets')" id="tabSheets">&#9729; Google Sheets</button>
     <button class="mode-tab" onclick="switchMode('file')" id="tabFile">&#128193; File Upload</button>
@@ -284,7 +284,7 @@ body.cursor-hidden{cursor:none}
   <div class="upload-panel" id="filePanel">
     <div class="upload-box" onclick="document.getElementById('fileInput').click()" id="uploadBox">
       <svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M8,15.01L10,17L11,16V20H13V16L14,17L16,15L12,11L8,15.01Z"/></svg>
-      <p>Drop or click to upload PEFS spreadsheet</p><small>.xlsx &bull; ABQ EnCore PEFS Summary Export</small>
+      <p>Drop or click to upload PEFS spreadsheet</p><small>.xlsx &bull; OKC EnCore PEFS Summary Export</small>
     </div>
     <input type="file" id="fileInput" accept=".xlsx,.xls"/>
   </div>
@@ -316,7 +316,7 @@ body.cursor-hidden{cursor:none}
 <div class="ctrl"><button onclick="goFullscreen()">&#9974;</button><button id="pauseBtn" onclick="togglePause()">&#10074;&#10074;</button><button onclick="prevSlide()">&#9664;</button><button onclick="nextSlide()">&#9654;</button><button onclick="returnToConfig()">&#9881;</button></div>
 
 <script>
-const LS_KEY='so_abq_pefs_url';
+const LS_KEY='so_okc_pefs_url';
 // Updated targets for new metrics
 const TARGETS={downtime:10,setup:25,feedsRunHr:1000,feedsSchHr:800};
 const Q_GOALS={downtime:8,setup:20,feedsRunHr:1200,feedsSchHr:900};
@@ -328,7 +328,7 @@ const QUOTES=[
   {text:"Every improvement counts. Every number matters.",sub:"Continuous Improvement never stops."},
   {text:"We don't rise to goals — We rise to our standards.",sub:"Push the standard higher every week."},
   {text:"Downtime is the enemy. Efficiency is the weapon.",sub:"Let's cut waste and maximize output."},
-  {text:"One team. One mission. Zero excuses.",sub:"Albuquerque sets the pace for SupplyOne."},
+  {text:"One team. One mission. Zero excuses.",sub:"OKC sets the pace for SupplyOne."},
   {text:"Small gains compound into massive results.",sub:"Keep chipping away — the numbers will follow."},
   {text:"The scoreboard doesn't lie.",sub:"Let the data fuel our next breakthrough."},
   {text:"Champions adjust. Adapt. Overcome.",sub:"Every shift is a chance to improve."},
@@ -623,7 +623,7 @@ function renderSummarySlide(){
   ];
   const good=allM.filter(m=>m.kpis.downtime<=TARGETS.downtime&&m.kpis.setup<=TARGETS.setup).length;
   return `<div class="summary-slide-inner">
-    <div class="summary-title">ABQ PLANT — WEEKLY SUMMARY</div>
+    <div class="summary-title">OKC PLANT — WEEKLY SUMMARY</div>
     <div class="summary-kpis">${kpis.map(k=>`<div class="summary-kpi ${k.hit?'hit':'miss'}">
       <div class="summary-kpi-label">${k.label}</div>
       <div class="summary-kpi-val" style="color:var(--${k.vc})">${k.val}</div>
@@ -706,8 +706,8 @@ function clearTimers(){clearTimeout(rotateTimer);clearInterval(progressTimer);do
 function togglePause(){isPaused=!isPaused;document.getElementById('pauseBtn').innerHTML=isPaused?'\u25B6':'\u23F8';isPaused?clearTimers():startRotation();}
 document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')nextSlide();else if(e.key==='ArrowLeft')prevSlide();else if(e.key===' '){e.preventDefault();togglePause();}});
 
-/* ═══ AUTO INIT — HARDCODED FOR ABQ TV ═══ */
-const HARDCODED_GS_URL = 'https://docs.google.com/spreadsheets/d/1P8f_HhxGzDLJk4_nRABS_LUhxK9iyIeFnWzqK29-Yec/export?format=xlsx';
+/* ═══ AUTO INIT — HARDCODED FOR OKC TV ═══ */
+const HARDCODED_GS_URL = 'https://docs.google.com/spreadsheets/d/11Z_SX441GJQwAO9Jro41s_1s_5aGrYDjurWqBeQcNzo/export?format=xlsx';
 let isTvMode = false;
 (function(){
   const params = new URLSearchParams(location.search);
